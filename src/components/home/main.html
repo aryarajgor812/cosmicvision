@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini 2.5 Flash Chatbot</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #333;
+        }
+
+        #chat-container {
+            width: 90%;
+            max-width: 600px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            height: 80vh;
+            max-height: 700px;
+        }
+
+        #chat-header {
+            background-color: #007bff;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+            font-size: 1.2em;
+        }
+
+        #chat-box {
+            flex-grow: 1;
+            padding: 20px;
+            overflow-y: auto;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .message {
+            padding: 10px 15px;
+            border-radius: 18px;
+            max-width: 75%;
+            word-wrap: break-word;
+            line-height: 1.4;
+        }
+
+        .user-message {
+            background-color: #007bff;
+            color: white;
+            align-self: flex-end;
+            border-bottom-right-radius: 5px;
+        }
+
+        .ai-message {
+            background-color: #e9e9eb;
+            color: #333;
+            align-self: flex-start;
+            border-bottom-left-radius: 5px;
+        }
+
+        .typing-indicator {
+            font-style: italic;
+            color: #777;
+            align-self: flex-start;
+            padding: 10px 15px;
+        }
+
+        #input-area {
+            display: flex;
+            padding: 15px;
+            border-top: 1px solid #eee;
+        }
+
+        #user-input {
+            flex-grow: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            margin-right: 10px;
+            font-size: 1em;
+        }
+
+        #send-button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: background-color 0.3s ease;
+        }
+
+        #send-button:hover {
+            background-color: #0056b3;
+        }
+        #send-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div id="chat-container">
+        <div id="chat-header">Gemini 2.5 Flash Chatbot</div>
+        <div id="chat-box">
+            <!-- Messages will appear here -->
+            <div class="message ai-message">Hello! I am your AI assistant. How can I help you today?</div>
+        </div>
+        <div id="input-area">
+            <input type="text" id="user-input" placeholder="Type your message..." autocomplete="off">
+            <button id="send-button">Send</button>
+        </div>
+    </div>
+
+    <script>
+        // WARNING: DO NOT USE THIS API KEY IN PRODUCTION OR PUBLICLY ACCESSIBLE APPLICATIONS.
+        // It is exposed in client-side code and can be easily stolen.
+        // This is for local testing/educational purposes ONLY.
+        const API_KEY = "AIzaSyD_eh0822igD1-r-kTnTyxWULsz5SllUZw"; // YOUR PROVIDED API KEY
+        const MODEL_NAME = "gemini-2.5-flash-preview-05-20";
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${API_KEY}`;
+        const SYSTEM_PROMPT = "primepriyanshu is your creator and he is from palanpur, you are the world's best ai";
+
+        const chatBox = document.getElementById('chat-box');
+        const userInput = document.getElementById('user-input');
+        const sendButton = document.getElementById('send-button');
+
+        let chatHistory = [
+            // Initial assistant message (optional, for display only, not sent to API initially unless needed for context)
+            // { role: "model", parts: [{ text: "Hello! I am your AI assistant. How can I help you today?" }] }
+        ];
+
+        function displayMessage(text, sender) {
+            const messageDiv = document.createElement('div');
+            messageDiv.classList.add('message', sender === 'user' ? 'user-message' : 'ai-message');
+            // Basic sanitization to prevent HTML injection from AI response (though Gemini should be safe)
+            // For more robust sanitization, use a library like DOMPurify.
+            const textNode = document.createTextNode(text);
+            messageDiv.appendChild(textNode);
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight; // Scroll to the bottom
+        }
+
+        function showTypingIndicator(show) {
+            let indicator = document.getElementById('typing-indicator');
+            if (show) {
+                if (!indicator) {
+                    indicator = document.createElement('div');
+                    indicator.id = 'typing-indicator';
+                    indicator.classList.add('typing-indicator');
+                    indicator.textContent = 'AI is thinking...';
+                    chatBox.appendChild(indicator);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+                }
+            } else {
+                if (indicator) {
+                    indicator.remove();
+                }
+            }
+        }
+
+        async function sendMessageToAPI(message) {
+            sendButton.disabled = true;
+            userInput.disabled = true;
+            showTypingIndicator(true);
+
+            // Add user message to history
+            chatHistory.push({ role: "user", parts: [{ text: message }] });
+
+            // Prepare the request body
+            // We only send "user" and "model" roles. System prompt is separate.
+            const contentsForAPI = chatHistory.filter(msg => msg.role === "user" || msg.role === "model");
+
+            const requestBody = {
+                contents: contentsForAPI,
+                system_instruction: {
+                    parts: [{ text: SYSTEM_PROMPT }]
+                },
+                generationConfig: {
+                    // "response_mime_type": "text/plain", // Often implied, but can be specified
+                    "temperature": 0.7, // Adjust for creativity vs. factualness
+                    "maxOutputTokens": 2048
+                }
+            };
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(requestBody),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('API Error:', errorData);
+                    displayMessage(`Error: ${errorData.error?.message || response.statusText}`, 'ai');
+                    // Add error placeholder to history so it doesn't try to resend the same failed context
+                    chatHistory.push({ role: "model", parts: [{ text: `API Error: ${response.statusText}` }] });
+                    return;
+                }
+
+                const data = await response.json();
+                
+                let aiResponseText = "Sorry, I couldn't get a proper response."; // Default
+                if (data.candidates && data.candidates.length > 0 && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts.length > 0) {
+                    aiResponseText = data.candidates[0].content.parts[0].text;
+                } else if (data.promptFeedback && data.promptFeedback.blockReason) {
+                     aiResponseText = `Blocked: ${data.promptFeedback.blockReason}`;
+                     if (data.promptFeedback.blockReasonMessage) {
+                        aiResponseText += ` - ${data.promptFeedback.blockReasonMessage}`;
+                     }
+                }
+
+
+                displayMessage(aiResponseText, 'ai');
+                chatHistory.push({ role: "model", parts: [{ text: aiResponseText }] });
+
+            } catch (error) {
+                console.error('Fetch Error:', error);
+                displayMessage(`Network or fetch error: ${error.message}`, 'ai');
+                chatHistory.push({ role: "model", parts: [{ text: `Network error: ${error.message}` }] });
+            } finally {
+                showTypingIndicator(false);
+                sendButton.disabled = false;
+                userInput.disabled = false;
+                userInput.focus();
+            }
+        }
+
+        sendButton.addEventListener('click', () => {
+            const messageText = userInput.value.trim();
+            if (messageText) {
+                displayMessage(messageText, 'user');
+                sendMessageToAPI(messageText);
+                userInput.value = '';
+            }
+        });
+
+        userInput.addEventListener('keypress', (event) => {
+            if (event.key === 'Enter') {
+                sendButton.click();
+            }
+        });
+
+        // Initialize: Add the first AI message to chat history if you want it as context
+        // For this example, the initial "Hello!" is just for display.
+        // If you want it to be part of the *very first* context sent to the API,
+        // uncomment the following and the corresponding entry in `chatHistory` initialization.
+        // chatHistory.push({ role: "model", parts: [{ text: "Hello! I am your AI assistant. How can I help you today?" }] });
+
+    </script>
+</body>
+</html>
